@@ -320,7 +320,7 @@ class VMSettingsWindow(Ui_SettingsDialog, QDialog):
             self.networking_groupbox.setEnabled(False)
 
         #max priv storage
-        self.priv_img_size = self.vm.get_private_img_sz()/1024/1024
+        self.priv_img_size = self.vm.get_private_img_size/1024/1024
         self.max_priv_storage.setMinimum(self.priv_img_size)
         self.max_priv_storage.setValue(self.priv_img_size)
 
