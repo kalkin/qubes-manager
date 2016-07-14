@@ -3,7 +3,8 @@
 #
 # The Qubes OS Project, http://www.qubes-os.org
 #
-# Copyright (C) 2014 Marek Marczykowski-Górecki <marmarek@invisiblethingslab.com>
+# Copyright (C) 2014 Marek Marczykowski-Górecki
+#                       <marmarek@invisiblethingslab.com>
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -17,12 +18,15 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+# USA.
 
 import threading
 import time
-from PyQt4.QtGui import QMessageBox
+
 from qubes import qubesutils
+
+from PyQt4.QtGui import QMessageBox
 
 
 class QubesBlockDevicesManager():
@@ -44,9 +48,9 @@ class QubesBlockDevicesManager():
 
         self.update()
 
-    def block_devs_event(self, xid):
+    def block_devs_event(self, _):
         now = time.time()
-        #don't update more often than 1/10 s
+        # don't update more often than 1/10 s
         if now - self.last_update_time >= 0.1:
             self.last_update_time = now
 
@@ -61,13 +65,13 @@ class QubesBlockDevicesManager():
 
         ret = (self.blk_state_changed, self.msg)
 
-        if self.blk_state_changed == True:
+        if self.blk_state_changed:
             self.check_counter += 1
 
             self.update()
             ret = (self.blk_state_changed, self.msg)
 
-            #let the update last for 3 manager-update cycles
+            # let the update last for 3 manager-update cycles
             if self.check_counter == 3:
                 self.check_counter = 0
                 self.blk_state_changed = False
@@ -83,24 +87,24 @@ class QubesBlockDevicesManager():
             att = qubesutils.block_check_attached(self.qvm_collection, blk[b])
             if b in self.current_blk:
                 if blk[b] == self.current_blk[b]:
-                    if self.current_attached[b] != att: #devices the same, sth with attaching changed
+                    if self.current_attached[b] != att:
+                        # devices the same, sth with attaching changed
                         self.current_attached[b] = att
-                else:   #device changed ?!
+                else:  # device changed ?!
                     self.current_blk[b] = blk[b]
                     self.current_attached[b] = att
-            else: #new device
+            else:  # new device
                 self.current_blk[b] = blk[b]
                 self.current_attached[b] = att
                 self.msg.append("Attached new device to <b>{}</b>: {}".format(
                     blk[b]['vm'], blk[b]['device']))
 
         to_delete = []
-        for b in self.current_blk: #remove devices that are not there anymore
+        for b in self.current_blk:  # remove devices that are not there anymore
             if b not in blk:
                 to_delete.append(b)
                 self.msg.append("Detached device from <b>{}</b>: {}".format(
-                    self.current_blk[b]['vm'],
-                    self.current_blk[b]['device']))
+                    self.current_blk[b]['vm'], self.current_blk[b]['device']))
 
         for d in to_delete:
             del self.current_blk[d]
@@ -108,33 +112,34 @@ class QubesBlockDevicesManager():
 
         self.__update_blk_entries__()
 
-
     def __update_blk_entries__(self):
         self.free_devs.clear()
         self.attached_devs.clear()
 
         for b in self.current_attached:
             if self.current_attached[b]:
-                self.attached_devs[b] = self.__make_entry__(b, self.current_blk[b], self.current_attached[b])
+                self.attached_devs[b] = self.__make_entry__(
+                    b, self.current_blk[b], self.current_attached[b])
             else:
-                self.free_devs[b] = self.__make_entry__(b, self.current_blk[b], None)
+                self.free_devs[b] = self.__make_entry__(b, self.current_blk[b],
+                                                        None)
 
-    def __make_entry__(self, k, dev, att):
+    def __make_entry__(self, _, dev, att):  # pylint: disable=no-self-use
         size_str = qubesutils.bytes_to_kmg(dev['size'])
-        entry = {   'dev': dev['device'],
-                    'dev_obj': dev,
-                    'backend_name': dev['vm'],
-                    'desc': dev['desc'],
-                    'mode': dev['mode'],
-                    'size': size_str,
-                    'attached_to': att, }
+        entry = {'dev': dev['device'],
+                 'dev_obj': dev,
+                 'backend_name': dev['vm'],
+                 'desc': dev['desc'],
+                 'mode': dev['mode'],
+                 'size': size_str,
+                 'attached_to': att, }
         return entry
 
     def attach_device(self, vm, dev):
         mode = self.free_devs[dev]['mode']
         if self.tray_message_func:
-            self.tray_message_func("{0} - attaching {1}"
-                                                 .format(vm.name, dev), msecs=3000)
+            self.tray_message_func("{0} - attaching {1}".format(vm.name, dev),
+                                   msecs=3000)
         qubesutils.block_attach(self.qvm_collection, vm,
                                 self.free_devs[dev]['dev_obj'], mode=mode)
 
@@ -142,19 +147,22 @@ class QubesBlockDevicesManager():
         frontend = self.attached_devs[dev_name]['attached_to']['frontend']
         vm = self.attached_devs[dev_name]['attached_to']['vm']
         if self.tray_message_func:
-            self.tray_message_func("{0} - detaching {1}".format(vm.name,
-                                                            dev_name), msecs=3000)
+            self.tray_message_func("{0} - detaching {1}".format(
+                vm.name, dev_name), msecs=3000)
         qubesutils.block_detach(vm, frontend)
 
     def check_if_serves_as_backend(self, vm):
         serves_for = []
         for d in self.attached_devs:
             if self.attached_devs[d]['backend_name'] == vm.name:
-                serves_for.append((self.attached_devs[d]['dev'], self.attached_devs[d]['attached_to']['vm']))
+                serves_for.append((self.attached_devs[d]['dev'],
+                                   self.attached_devs[d]['attached_to']['vm']))
 
         if len(serves_for) > 0:
-            msg = "VM <b>" + vm.name + "</b> attaches block devices to other VMs: "
-            msg += ', '.join(["<b>"+v.name+"</b>("+d+")" for (d,v) in serves_for ])
-            msg += ".<br><br> Shutting the VM down will dettach the devices from them."
+            msg = "VM <b>" + vm.name + \
+                  "</b> attaches block devices to other VMs: "
+            msg += ', '.join(
+                ["<b>" + v.name + "</b>(" + d + ")" for (d, v) in serves_for])
+            msg += ".<br><br> Shutting the VM down will dettach the devices from them."  # NOQA
 
-            QMessageBox.warning (None, "Warning!", msg)
+            QMessageBox.warning(None, "Warning!", msg)
