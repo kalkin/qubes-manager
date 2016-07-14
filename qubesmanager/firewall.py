@@ -15,29 +15,20 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-#
-#
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+# USA.
 
-import sys
-import os
-import re
-import xml.etree.ElementTree
-
-from PyQt4.QtCore import *
-from PyQt4.QtGui import *
 import datetime
-
-from qubes.qubes import QubesVmCollection
-from qubes.qubes import QubesException
-from qubes.qubes import dry_run
+import re
 
 import ui_newfwruledlg
+from PyQt4.QtCore import *
+from PyQt4.QtGui import *
 
 
 class QIPAddressValidator(QValidator):
-    def __init__(self, parent = None):
-        super (QIPAddressValidator, self).__init__(parent)
+    def __init__(self, parent=None):
+        super(QIPAddressValidator, self).__init__(parent)
 
     def validate(self, input, pos):
         hostname = str(input)
@@ -74,15 +65,19 @@ class QIPAddressValidator(QValidator):
 
         return (QValidator.Invalid, pos)
 
-class NewFwRuleDlg (QDialog, ui_newfwruledlg.Ui_NewFwRuleDlg):
-    def __init__(self, parent = None):
-        super (NewFwRuleDlg, self).__init__(parent)
+
+class NewFwRuleDlg(QDialog, ui_newfwruledlg.Ui_NewFwRuleDlg):
+    def __init__(self, parent=None):
+        super(NewFwRuleDlg, self).__init__(parent)
         self.setupUi(self)
 
         self.set_ok_enabled(False)
         self.addressComboBox.setValidator(QIPAddressValidator())
-        self.addressComboBox.editTextChanged.connect(self.address_editing_finished)
-        self.serviceComboBox.setValidator(QRegExpValidator(QRegExp("[a-z][a-z0-9-]+|[0-9]+(-[0-9]+)?", Qt.CaseInsensitive), None))
+        self.addressComboBox.editTextChanged.connect(
+            self.address_editing_finished)
+        self.serviceComboBox.setValidator(QRegExpValidator(
+            QRegExp("[a-z][a-z0-9-]+|[0-9]+(-[0-9]+)?", Qt.CaseInsensitive),
+            None))
         self.serviceComboBox.setEnabled(False)
         self.serviceComboBox.setInsertPolicy(QComboBox.InsertAtBottom)
         self.populate_combos()
@@ -92,26 +87,22 @@ class NewFwRuleDlg (QDialog, ui_newfwruledlg.Ui_NewFwRuleDlg):
         if self.tcp_radio.isChecked() or self.udp_radio.isChecked():
             if len(self.serviceComboBox.currentText()) == 0:
                 msg = QMessageBox()
-                msg.warning(self, "Firewall rule",
+                msg.warning(
+                    self, "Firewall rule",
                     "You need to fill service name/port for TCP/UDP rule")
                 return
         QDialog.accept(self)
 
     def populate_combos(self):
         example_addresses = [
-                "", "www.example.com",
-                "192.168.1.100", "192.168.0.0/16",
-                "*"
-            ]
+            "", "www.example.com", "192.168.1.100", "192.168.0.0/16", "*"
+        ]
         displayed_services = [
-                '',
-                'http', 'https', 'ftp', 'ftps', 'smtp',
-                'smtps', 'pop3', 'pop3s', 'imap', 'imaps', 'odmr', 
-                'nntp', 'nntps', 'ssh', 'telnet', 'telnets', 'ntp', 
-                'snmp', 'ldap', 'ldaps', 'irc', 'ircs', 'xmpp-client',
-                'syslog', 'printer', 'nfs', 'x11',
-                '1024-1234'
-            ]
+            '', 'http', 'https', 'ftp', 'ftps', 'smtp', 'smtps', 'pop3',
+            'pop3s', 'imap', 'imaps', 'odmr', 'nntp', 'nntps', 'ssh', 'telnet',
+            'telnets', 'ntp', 'snmp', 'ldap', 'ldaps', 'irc', 'ircs',
+            'xmpp-client', 'syslog', 'printer', 'nfs', 'x11', '1024-1234'
+        ]
         for address in example_addresses:
             self.addressComboBox.addItem(address)
         for service in displayed_services:
@@ -137,51 +128,46 @@ class NewFwRuleDlg (QDialog, ui_newfwruledlg.Ui_NewFwRuleDlg):
         if checked:
             self.serviceComboBox.setEnabled(False)
 
+
 class QubesFirewallRulesModel(QAbstractItemModel):
     def __init__(self, parent=None):
         QAbstractItemModel.__init__(self, parent)
 
         self.__columnValues = {
-            0: lambda x: "*" if self.children[x]["address"] == "0.0.0.0" and
-                                self.children[x]["netmask"] == 0  else
-            self.children[x]["address"] + ("" if self.children[x][ "netmask"] == 32  else
-                                           " /{0}".format(self.children[x][
-                                               "netmask"])),
-            1: lambda x: "any" if self.children[x]["portBegin"] == 0  else
-            "{0}-{1}".format(self.children[x]["portBegin"], self.children[x][
-                "portEnd"]) if self.children[x]["portEnd"] is not None  else \
-                self.get_service_name(self.children[x]["portBegin"]),
+            0: lambda x: "*" if self.children[x]["address"] == "0.0.0.0" and self.children[x]["netmask"] == 0 else self.children[x]["address"] + ("" if self.children[x]["netmask"] == 32 else " /{0}".format(self.children[x]["netmask"])),  # NOQA
+            1: lambda x: "any" if self.children[x]["portBegin"] == 0 else "{0}-{1}".format(self.children[x]["portBegin"], self.children[x]["portEnd"]) if self.children[x]["portEnd"] is not None else self.get_service_name(self.children[x]["portBegin"]),  # NOQA
             2: lambda x: self.children[x]["proto"], }
-        self.__columnNames = {0: "Address", 1: "Service", 2: "Protocol", }
+        self.__columnNames = {0: "Address",
+                              1: "Service",
+                              2: "Protocol", }
         self.__services = list()
-        pattern = re.compile("(?P<name>[a-z][a-z0-9-]+)\s+(?P<port>[0-9]+)/(?P<protocol>[a-z]+)", re.IGNORECASE)
+        pattern = re.compile(
+            "(?P<name>[a-z][a-z0-9-]+)\s+(?P<port>[0-9]+)/(?P<protocol>[a-z]+)",
+            re.IGNORECASE)
         f = open('/etc/services', 'r')
         for line in f:
             match = pattern.match(line)
             if match is not None:
                 service = match.groupdict()
-                self.__services.append( (service["name"], int(service["port"]),) )
+                self.__services.append((service["name"],
+                                        int(service["port"]), ))
         f.close()
 
         self.fw_changed = False
 
     def sort(self, idx, order):
-        from operator import attrgetter
-
         rev = (order == Qt.AscendingOrder)
-        if idx==0:
-            self.children.sort(key=lambda x: x['address'], reverse = rev)
-        if idx==1:
-            self.children.sort(key=lambda x: self.get_service_name(x[
-                "portBegin"]) if x["portEnd"] == None else x["portBegin"],
-                               reverse = rev)
-        if idx==2:
-            self.children.sort(key=lambda x: x['proto'], reverse
-            = rev)
+        if idx == 0:
+            self.children.sort(key=lambda x: x['address'], reverse=rev)
+        if idx == 1:
+            self.children.sort(
+                key=lambda x: self.get_service_name(x["portBegin"]) if x["portEnd"] == None else x["portBegin"],  # NOQA
+                reverse=rev)
+        if idx == 2:
+            self.children.sort(key=lambda x: x['proto'], reverse=rev)
         index1 = self.createIndex(0, 0)
-        index2 = self.createIndex(len(self)-1, len(self.__columnValues)-1)
+        index2 = self.createIndex(len(self) - 1, len(self.__columnValues) - 1)
         self.dataChanged.emit(index1, index2)
-
 
     def get_service_name(self, port):
         for service in self.__services:
@@ -228,12 +214,11 @@ class QubesFirewallRulesModel(QAbstractItemModel):
                 (self.tempFullAccessExpireTime != 0) != tempFullAccess:
             self.fw_changed = True
 
-        conf = { "allow": allow,
+        conf = {"allow": allow,
                 "allowDns": dns,
                 "allowIcmp": icmp,
                 "allowYumProxy": yumproxy,
-                "rules": list()
-            }
+                "rules": list()}
 
         for rule in self.children:
             if "expire" in rule and rule["address"] == "0.0.0.0" and \
@@ -242,7 +227,7 @@ class QubesFirewallRulesModel(QAbstractItemModel):
                 if tempFullAccess:
                     rule["expire"] = \
                         int(datetime.datetime.now().strftime("%s")) + \
-                        tempFullAccessTime*60
+                        tempFullAccessTime * 60
                 tempFullAccess = False
             conf["rules"].append(rule)
 
@@ -251,8 +236,8 @@ class QubesFirewallRulesModel(QAbstractItemModel):
                                   "netmask": 0,
                                   "proto": "any",
                                   "expire": int(
-                                      datetime.datetime.now().strftime("%s"))+\
-                                        tempFullAccessTime*60
+                                      datetime.datetime.now().strftime("%s")) +
+                                        tempFullAccessTime * 60
                                   })
 
         if self.fw_changed:
@@ -296,7 +281,7 @@ class QubesFirewallRulesModel(QAbstractItemModel):
     def headerData(self, section, orientation, role=Qt.DisplayRole):
         if section < len(self.__columnNames) \
                 and orientation == Qt.Horizontal and role == Qt.DisplayRole:
-                    return self.__columnNames[section]
+            return self.__columnNames[section]
 
         return QVariant()
 
@@ -335,4 +320,3 @@ class QubesFirewallRulesModel(QAbstractItemModel):
 
     def __len__(self):
         return len(self.children)
-
