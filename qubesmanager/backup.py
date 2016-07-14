@@ -17,48 +17,37 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+# USA.
 #
 #
 
-import sys
+import grp
 import os
-import signal
+import pwd
 import shutil
+import signal
+import sys
+import time
+
+from qubes import backup, qubesutils
+from qubes.qubes import QubesHost, QubesVmCollection
+
+import main
+from backup_utils import *
+from multiselectwidget import *
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
-
-from qubes.qubes import QubesVmCollection
-from qubes.qubes import QubesException
-from qubes.qubes import QubesDaemonPidfile
-from qubes.qubes import QubesHost
-from qubes import backup
-from qubes import qubesutils
-
-import qubesmanager.resources_rc
-
-from pyinotify import WatchManager, Notifier, ThreadedNotifier, EventsCodes, ProcessEvent
-
-import time
 from thread_monitor import *
-from operator import itemgetter
-
-from datetime import datetime
-from string import replace
-
 from ui_backupdlg import *
-from multiselectwidget import *
-
-from backup_utils import *
-import main
-import grp,pwd
 
 
 class BackupVMsWindow(Ui_Backup, QWizard):
 
-    __pyqtSignals__ = ("backup_progress(int)",)
+    __pyqtSignals__ = ("backup_progress(int)", )
 
-    def __init__(self, app, qvm_collection, blk_manager, shutdown_vm_func, parent=None):
+    def __init__(self, app, qvm_collection, blk_manager, shutdown_vm_func,
+                 parent=None):
         super(BackupVMsWindow, self).__init__(parent)
 
         self.app = app
@@ -74,7 +63,7 @@ class BackupVMsWindow(Ui_Backup, QWizard):
         self.vm = self.qvm_collection[0]
         self.files_to_backup = None
 
-        assert self.vm != None
+        assert self.vm is not None
 
         self.setupUi(self)
 
@@ -85,31 +74,36 @@ class BackupVMsWindow(Ui_Backup, QWizard):
         self.select_vms_widget = MultiSelectWidget(self)
         self.verticalLayout.insertWidget(1, self.select_vms_widget)
 
-        self.connect(self, SIGNAL("currentIdChanged(int)"), self.current_page_changed)
-        self.connect(self.select_vms_widget, SIGNAL("selected_changed()"), self.check_running)
-        self.connect(self.select_vms_widget, SIGNAL("items_removed(PyQt_PyObject)"), self.vms_removed)
-        self.connect(self.select_vms_widget, SIGNAL("items_added(PyQt_PyObject)"), self.vms_added)
+        self.connect(self, SIGNAL("currentIdChanged(int)"),
+                     self.current_page_changed)
+        self.connect(self.select_vms_widget, SIGNAL("selected_changed()"),
+                     self.check_running)
+        self.connect(self.select_vms_widget,
+                     SIGNAL("items_removed(PyQt_PyObject)"), self.vms_removed)
+        self.connect(self.select_vms_widget,
+                     SIGNAL("items_added(PyQt_PyObject)"), self.vms_added)
         self.refresh_button.clicked.connect(self.check_running)
-        self.shutdown_running_vms_button.clicked.connect(self.shutdown_all_running_selected)
-        self.connect(self, SIGNAL("backup_progress(int)"), self.progress_bar.setValue)
-        self.dir_line_edit.connect(self.dir_line_edit, SIGNAL("textChanged(QString)"), self.backup_location_changed)
+        self.shutdown_running_vms_button.clicked.connect(
+            self.shutdown_all_running_selected)
+        self.connect(self, SIGNAL("backup_progress(int)"),
+                     self.progress_bar.setValue)
+        self.dir_line_edit.connect(self.dir_line_edit,
+                                   SIGNAL("textChanged(QString)"),
+                                   self.backup_location_changed)
 
         self.select_vms_page.isComplete = self.has_selected_vms
         self.select_dir_page.isComplete = self.has_selected_dir_and_pass
-        #FIXME
-        #this causes to run isComplete() twice, I don't know why
-        self.select_vms_page.connect(
-                self.select_vms_widget,
-                SIGNAL("selected_changed()"),
-                SIGNAL("completeChanged()"))
-        self.passphrase_line_edit.connect(
-                self.passphrase_line_edit,
-                SIGNAL("textChanged(QString)"),
-                self.backup_location_changed)
+        # FIXME
+        # this causes to run isComplete() twice, I don't know why
+        self.select_vms_page.connect(self.select_vms_widget,
+                                     SIGNAL("selected_changed()"),
+                                     SIGNAL("completeChanged()"))
+        self.passphrase_line_edit.connect(self.passphrase_line_edit,
+                                          SIGNAL("textChanged(QString)"),
+                                          self.backup_location_changed)
         self.passphrase_line_edit_verify.connect(
-                self.passphrase_line_edit_verify,
-                SIGNAL("textChanged(QString)"),
-                self.backup_location_changed)
+            self.passphrase_line_edit_verify, SIGNAL("textChanged(QString)"),
+            self.backup_location_changed)
 
         self.total_size = 0
         self.__fill_vms_list__()
@@ -137,8 +131,8 @@ class BackupVMsWindow(Ui_Backup, QWizard):
     def save_settings(self):
         main.manager_window.manager_settings.setValue(
             'backup/vmname', self.appvm_combobox.currentText())
-        main.manager_window.manager_settings.setValue(
-            'backup/path', self.dir_line_edit.text())
+        main.manager_window.manager_settings.setValue('backup/path',
+                                                      self.dir_line_edit.text())
         main.manager_window.manager_settings.setValue(
             'backup/encrypt', self.encryption_checkbox.isChecked())
 
@@ -156,18 +150,18 @@ class BackupVMsWindow(Ui_Backup, QWizard):
                 self.size = qubesutils.get_disk_usage(home_dir)
             else:
                 self.size = self.get_vm_size(vm)
-            super(BackupVMsWindow.VmListItem, self).__init__(vm.name+ " (" + qubesutils.size_to_human(self.size) + ")")
+            super(BackupVMsWindow.VmListItem, self).__init__(
+                vm.name + " (" + qubesutils.size_to_human(self.size) + ")")
 
         def get_vm_size(self, vm):
             size = 0
             if vm.private_img is not None:
-                size += qubesutils.get_disk_usage (vm.private_img)
+                size += qubesutils.get_disk_usage(vm.private_img)
 
             if vm.updateable:
                 size += qubesutils.get_disk_usage(vm.root_img)
 
             return size
-
 
     def __fill_vms_list__(self):
         for vm in self.qvm_collection.values():
@@ -175,7 +169,7 @@ class BackupVMsWindow(Ui_Backup, QWizard):
                 continue
 
             item = BackupVMsWindow.VmListItem(vm)
-            if vm.include_in_backups == True:
+            if vm.include_in_backups:
                 self.select_vms_widget.selected_list.addItem(item)
                 self.total_size += item.size
             else:
@@ -206,7 +200,7 @@ class BackupVMsWindow(Ui_Backup, QWizard):
         self.show_running_vms_warning(some_selected_vms_running)
 
         for i in range(self.select_vms_widget.available_list.count()):
-            item =  self.select_vms_widget.available_list.item(i)
+            item = self.select_vms_widget.available_list.item(i)
             if item.vm.is_running() and item.vm.qid != 0:
                 item.setForeground(QBrush(QColor(255, 0, 0)))
             else:
@@ -222,10 +216,13 @@ class BackupVMsWindow(Ui_Backup, QWizard):
         for vm in vms:
             self.blk_manager.check_if_serves_as_backend(vm)
 
-        reply = QMessageBox.question(None, "VM Shutdown Confirmation",
-                                     "Are you sure you want to power down the following VMs: <b>{0}</b>?<br>"
-                                     "<small>This will shutdown all the running applications within them.</small>".format(', '.join(names)),
-                                     QMessageBox.Yes | QMessageBox.Cancel)
+        reply = QMessageBox.question(
+            None,
+            "VM Shutdown Confirmation",
+            "Are you sure you want to power down the following VMs: <b>{0}</b>?<br>"  # NOQA
+            "<small>This will shutdown all the running applications within them.</small>".format(  # NOQA
+                ', '.join(names)),
+            QMessageBox.Yes | QMessageBox.Cancel)
 
         self.app.processEvents()
 
@@ -233,16 +230,18 @@ class BackupVMsWindow(Ui_Backup, QWizard):
 
             wait_time = 60.0
             for vm in vms:
-                self.shutdown_vm_func(vm, wait_time*1000)
+                self.shutdown_vm_func(vm, wait_time * 1000)
 
-            progress = QProgressDialog ("Shutting down VMs <b>{0}</b>...".format(', '.join(names)), "", 0, 0)
+            progress = QProgressDialog(
+                "Shutting down VMs <b>{0}</b>...".format(', '.join(names)), "",
+                0, 0)
             progress.setModal(True)
             progress.show()
 
             wait_for = wait_time
             while self.check_running() and wait_for > 0:
                 self.app.processEvents()
-                time.sleep (0.5)
+                time.sleep(0.5)
                 wait_for -= 0.5
 
             progress.hide()
@@ -264,28 +263,41 @@ class BackupVMsWindow(Ui_Backup, QWizard):
     def validateCurrentPage(self):
         if self.currentPage() is self.select_vms_page:
             if self.check_running():
-                QMessageBox.information(None, "Wait!", "Some selected VMs are running. Running VMs can not be backuped. Please shut them down or remove them from the list.")
+                QMessageBox.information(
+                    None, "Wait!",
+                    "Some selected VMs are running. Running VMs can not be"
+                    " backuped. Please shut them down or remove them from the"
+                    " list.")
                 return False
 
             self.selected_vms = []
             for i in range(self.select_vms_widget.selected_list.count()):
-                self.selected_vms.append(self.select_vms_widget.selected_list.item(i).vm)
+                self.selected_vms.append(
+                    self.select_vms_widget.selected_list.item(i).vm)
 
         elif self.currentPage() is self.select_dir_page:
             backup_location = str(self.dir_line_edit.text())
             if not backup_location:
-                QMessageBox.information(None, "Wait!", "Enter backup target location first.")
+                QMessageBox.information(None, "Wait!",
+                                        "Enter backup target location first.")
                 return False
             if self.appvm_combobox.currentIndex() == 0 and \
                    not os.path.isdir(backup_location):
-                QMessageBox.information(None, "Wait!",
-                        "Selected directory do not exists or not a directory (%s)." % backup_location)
+                QMessageBox.information(
+                    None, "Wait!",
+                    "Selected directory do not exists or not a directory (%s)."
+                    % backup_location)
                 return False
             if not len(self.passphrase_line_edit.text()):
-                QMessageBox.information(None, "Wait!", "Enter passphrase for backup encryption/verification first.")
+                QMessageBox.information(
+                    None, "Wait!",
+                    "Enter passphrase for backup encryption/verification "
+                    "first.")
                 return False
-            if self.passphrase_line_edit.text() != self.passphrase_line_edit_verify.text():
-                QMessageBox.information(None, "Wait!", "Enter the same passphrase in both fields.")
+            if self.passphrase_line_edit.text(
+            ) != self.passphrase_line_edit_verify.text():
+                QMessageBox.information(
+                    None, "Wait!", "Enter the same passphrase in both fields.")
                 return False
 
         return True
@@ -300,46 +312,46 @@ class BackupVMsWindow(Ui_Backup, QWizard):
         msg = []
 
         try:
-            backup.backup_do(unicode(self.dir_line_edit.text()),
-                    self.files_to_backup,
-                    unicode(self.passphrase_line_edit.text()),
-                    progress_callback=self.update_progress_bar,
-                    encrypted=self.encryption_checkbox.isChecked(),
-                    appvm=self.target_appvm)
-            #simulate_long_lasting_proces(10, self.update_progress_bar)
+            backup.backup_do(
+                unicode(self.dir_line_edit.text()), self.files_to_backup,
+                unicode(self.passphrase_line_edit.text()),
+                progress_callback=self.update_progress_bar,
+                encrypted=self.encryption_checkbox.isChecked(),
+                appvm=self.target_appvm)
+            # simulate_long_lasting_proces(10, self.update_progress_bar)
         except backup.BackupCanceledError as ex:
             msg.append(str(ex))
             self.canceled = True
             if ex.tmpdir:
                 self.tmpdir_to_remove = ex.tmpdir
         except Exception as ex:
-            print "Exception:",ex
+            print "Exception:", ex
             msg.append(str(ex))
 
-        if len(msg) > 0 :
+        if len(msg) > 0:
             thread_monitor.set_error_msg('\n'.join(msg))
 
         thread_monitor.set_finished()
-
 
     def current_page_changed(self, id):
         old_sigchld_handler = signal.signal(signal.SIGCHLD, signal.SIG_DFL)
         if self.currentPage() is self.confirm_page:
 
             self.target_appvm = None
-            if self.appvm_combobox.currentIndex() != 0:   #An existing appvm chosen
+            if self.appvm_combobox.currentIndex(
+            ) != 0:  # An existing appvm chosen
                 self.target_appvm = self.qvm_collection.get_vm_by_name(
-                        self.appvm_combobox.currentText())
+                    self.appvm_combobox.currentText())
 
             del self.func_output[:]
             try:
                 self.files_to_backup = backup.backup_prepare(
-                        self.selected_vms,
-                        print_callback = self.gather_output,
-                        hide_vm_names=self.encryption_checkbox.isChecked())
+                    self.selected_vms, print_callback=self.gather_output,
+                    hide_vm_names=self.encryption_checkbox.isChecked())
             except Exception as ex:
-                print "Exception:",ex
-                QMessageBox.critical(None, "Error while preparing backup.", "ERROR: {0}".format(ex))
+                print "Exception:", ex
+                QMessageBox.critical(None, "Error while preparing backup.",
+                                     "ERROR: {0}".format(ex))
 
             self.textEdit.setReadOnly(True)
             self.textEdit.setFontFamily("Monospace")
@@ -350,32 +362,34 @@ class BackupVMsWindow(Ui_Backup, QWizard):
             self.button(self.FinishButton).setDisabled(True)
             self.showFileDialog.setEnabled(
                 self.appvm_combobox.currentIndex() != 0)
-            self.showFileDialog.setChecked(self.showFileDialog.isEnabled()
-                                           and str(self.dir_line_edit.text())
+            self.showFileDialog.setChecked(self.showFileDialog.isEnabled() and
+                                           str(self.dir_line_edit.text())
                                            .count("media/") > 0)
             self.thread_monitor = ThreadMonitor()
-            thread = threading.Thread (target= self.__do_backup__ , args=(self.thread_monitor,))
+            thread = threading.Thread(target=self.__do_backup__, args=(
+                self.thread_monitor, ))
             thread.daemon = True
             thread.start()
 
-            counter = 0
             while not self.thread_monitor.is_finished():
                 self.app.processEvents()
-                time.sleep (0.1)
+                time.sleep(0.1)
 
             if not self.thread_monitor.success:
                 if self.canceled:
                     self.progress_status.setText("Backup aborted.")
                     if self.tmpdir_to_remove:
-                        if QMessageBox.warning(None, "Backup aborted",
+                        if QMessageBox.warning(
+                                None, "Backup aborted",
                                 "Do you want to remove temporary files from "
-                                "%s?" % self.tmpdir_to_remove,
-                                QMessageBox.Yes, QMessageBox.No) == QMessageBox.Yes:
+                                "%s?" % self.tmpdir_to_remove, QMessageBox.Yes,
+                                QMessageBox.No) == QMessageBox.Yes:
                             shutil.rmtree(self.tmpdir_to_remove)
                 else:
                     self.progress_status.setText("Backup error.")
-                    QMessageBox.warning (self, "Backup error!", "ERROR: {}".format(
-                        self.thread_monitor.error_msg))
+                    QMessageBox.warning(
+                        self, "Backup error!",
+                        "ERROR: {}".format(self.thread_monitor.error_msg))
             else:
                 self.progress_bar.setValue(100)
                 self.progress_status.setText("Backup finished.")
@@ -383,18 +397,18 @@ class BackupVMsWindow(Ui_Backup, QWizard):
                 orig_text = self.progress_status.text
                 self.progress_status.setText(
                     orig_text + " Please unmount your backup volume and cancel "
-                              "the file selection dialog.")
+                    "the file selection dialog.")
                 if self.target_appvm:
                     self.target_appvm.run("QUBESRPC %s dom0" % "qubes"
-                                                               ".SelectDirectory")
+                                          ".SelectDirectory")
             self.button(self.CancelButton).setEnabled(False)
             self.button(self.FinishButton).setEnabled(True)
             self.showFileDialog.setEnabled(False)
         signal.signal(signal.SIGCHLD, old_sigchld_handler)
 
     def reject(self):
-        #cancell clicked while the backup is in progress.
-        #calling kill on tar.
+        # cancell clicked while the backup is in progress.
+        # calling kill on tar.
         if self.currentPage() is self.commit_page:
             if backup.backup_cancel():
                 self.button(self.CancelButton).setDisabled(True)
@@ -407,32 +421,32 @@ class BackupVMsWindow(Ui_Backup, QWizard):
     def has_selected_dir_and_pass(self):
         if not len(self.passphrase_line_edit.text()):
             return False
-        if self.passphrase_line_edit.text() != self.passphrase_line_edit_verify.text():
+        if self.passphrase_line_edit.text(
+        ) != self.passphrase_line_edit_verify.text():
             return False
         return len(self.dir_line_edit.text()) > 0
 
-    def backup_location_changed(self, new_dir = None):
+    def backup_location_changed(self, new_dir=None):
         self.select_dir_page.emit(SIGNAL("completeChanged()"))
-
 
 # Bases on the original code by:
 # Copyright (c) 2002-2007 Pascal Varet <p.varet@gmail.com>
 
-def handle_exception( exc_type, exc_value, exc_traceback ):
-    import sys
+
+def handle_exception(exc_type, exc_value, exc_traceback):
     import os.path
     import traceback
 
-    filename, line, dummy, dummy = traceback.extract_tb( exc_traceback ).pop()
-    filename = os.path.basename( filename )
-    error    = "%s: %s" % ( exc_type.__name__, exc_value )
+    filename, line, dummy, dummy = traceback.extract_tb(exc_traceback).pop()
+    filename = os.path.basename(filename)
+    error = "%s: %s" % (exc_type.__name__, exc_value)
 
-    QMessageBox.critical(None, "Houston, we have a problem...",
-                         "Whoops. A critical error has occured. This is most likely a bug "
-                         "in Qubes Restore VMs application.<br><br>"
-                         "<b><i>%s</i></b>" % error +
-                         "at <b>line %d</b> of file <b>%s</b>.<br/><br/>"
-                         % ( line, filename ))
+    QMessageBox.critical(
+        None, "Houston, we have a problem...",
+        "Whoops. A critical error has occured. This is most likely a bug "
+        "in Qubes Restore VMs application.<br><br>"
+        "<b><i>%s</i></b>" % error +
+        "at <b>line %d</b> of file <b>%s</b>.<br/><br/>" % (line, filename))
 
 
 def app_main():
@@ -460,7 +474,6 @@ def app_main():
 
     app.exec_()
     app.exit()
-
 
 
 if __name__ == "__main__":
