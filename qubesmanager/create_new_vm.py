@@ -17,32 +17,24 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-#
-#
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+# USA.
 
-import sys
-import os
+import threading
+import time
+
+from qubes.qubes import (QubesHVm, QubesVm, QubesVmCollection,
+                         QubesVmLabels)
+
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
-
-from qubes.qubes import QubesVmCollection
-from qubes.qubes import QubesVmLabels
-from qubes.qubes import QubesException
-from qubes.qubes import QubesVm,QubesHVm
-
-import qubesmanager.resources_rc
-
-import time
-import threading
-
-from ui_newappvmdlg import *
 from thread_monitor import *
+from ui_newappvmdlg import *
 
 
-class NewVmDlg (QDialog, Ui_NewVMDlg):
-    def __init__(self, app, qvm_collection, trayIcon, parent = None):
-        super (NewVmDlg, self).__init__(parent)
+class NewVmDlg(QDialog, Ui_NewVMDlg):
+    def __init__(self, app, qvm_collection, trayIcon, parent=None):
+        super(NewVmDlg, self).__init__(parent)
         self.setupUi(self)
 
         self.app = app
@@ -50,14 +42,14 @@ class NewVmDlg (QDialog, Ui_NewVMDlg):
         self.qvm_collection = qvm_collection
 
         # Theoretically we should be locking for writing here and unlock
-        # only after the VM creation finished. But the code would be more messy...
-        # Instead we lock for writing in the actual worker thread
+        # only after the VM creation finished. But the code would be more
+        # messy...  Instead we lock for writing in the actual worker thread
 
         try:
             from qubes.qubes import QubesHVm
         except ImportError:
             pass
-        else: 
+        else:
             self.hvm_radio.setEnabled(True)
             self.hvmtpl_radio.setEnabled(True)
 
@@ -69,12 +61,13 @@ class NewVmDlg (QDialog, Ui_NewVMDlg):
         self.label_list.sort(key=lambda l: l.index)
         for (i, label) in enumerate(self.label_list):
             self.vmlabel.insertItem(i, label.name)
-            self.vmlabel.setItemIcon (i, QIcon(label.icon_path))
+            self.vmlabel.setItemIcon(i, QIcon(label.icon_path))
 
         self.fill_template_list()
         self.fill_netvm_list()
 
-        self.vmname.setValidator(QRegExpValidator(QRegExp("[a-zA-Z0-9-]*", Qt.CaseInsensitive), None))
+        self.vmname.setValidator(QRegExpValidator(
+            QRegExp("[a-zA-Z0-9-]*", Qt.CaseInsensitive), None))
         self.vmname.selectAll()
         self.vmname.setFocus()
 
@@ -92,7 +85,9 @@ class NewVmDlg (QDialog, Ui_NewVMDlg):
                 return False
             else:
                 return QubesVm.is_template_compatible(vm)
-        self.template_vm_list = filter(filter_template, self.qvm_collection.values())
+
+        self.template_vm_list = filter(filter_template,
+                                       self.qvm_collection.values())
 
         self.template_name.clear()
         default_index = 0
@@ -116,6 +111,7 @@ class NewVmDlg (QDialog, Ui_NewVMDlg):
                 return True
             else:
                 return False
+
         self.netvm_list = filter(filter_netvm, self.qvm_collection.values())
 
         self.netvm_name.clear()
@@ -132,7 +128,7 @@ class NewVmDlg (QDialog, Ui_NewVMDlg):
         if checked:
             self.fill_netvm_list()
             self.netvm_name.setEnabled(True)
-        else:    
+        else:
             self.netvm_name.clear()
             self.netvm_name.setEnabled(False)
 
@@ -187,17 +183,23 @@ class NewVmDlg (QDialog, Ui_NewVMDlg):
     def accept(self):
         vmname = str(self.vmname.text())
         if self.qvm_collection.get_vm_by_name(vmname) is not None:
-            QMessageBox.warning (None, "Incorrect AppVM Name!", "A VM with the name <b>{0}</b> already exists in the system!".format(vmname))
+            msg = "A VM with the name <b>{0}</b> already exists in the system!"
+            QMessageBox.warning(None, "Incorrect AppVM Name!",
+                                msg.format(vmname))
             return
 
         label = self.label_list[self.vmlabel.currentIndex()]
-        
+
         template_vm = None
         if self.template_name.isEnabled():
             if len(self.template_vm_list) == 0:
-                QMessageBox.warning (None, "No template available!", "Cannot create non-standalone VM when no compatible template exists. Create template VM first or choose to create standalone VM.")
+                msg = "Cannot create non-standalone VM when no compatible " \
+                      "template exists. Create template VM first or choose to " \
+                      "create standalone VM."
+                QMessageBox.warning(None, "No template available!", msg)
                 return
-            template_vm = self.template_vm_list[self.template_name.currentIndex()]
+            template_vm = self.template_vm_list[self.template_name.currentIndex(
+            )]
 
         netvm = None
         if self.netvm_name.isEnabled():
@@ -221,24 +223,26 @@ class NewVmDlg (QDialog, Ui_NewVMDlg):
             vmtype = "TemplateHVM"
         else:
             QErrorMessage.showMessage(None, "Error creating AppVM!", "Unknown "
-                                                                   "VM type, this is error in Qubes Manager")
+                                      "VM type, this is error in Qubes Manager")
             self.done(0)
-
 
         vmclass = "Qubes" + vmtype.replace("VM", "Vm")
         thread_monitor = ThreadMonitor()
-        thread = threading.Thread (target=self.do_create_vm, args=(vmclass, vmname, label, template_vm, netvm, standalone, allow_networking, thread_monitor))
+        thread = threading.Thread(target=self.do_create_vm, args=(
+            vmclass, vmname, label, template_vm, netvm, standalone,
+            allow_networking, thread_monitor))
         thread.daemon = True
         thread.start()
 
-        progress = QProgressDialog ("Creating new {0} <b>{1}</b>...".format(vmtype, vmname), "", 0, 0)
+        progress = QProgressDialog("Creating new {0} <b>{1}</b>...".format(
+            vmtype, vmname), "", 0, 0)
         progress.setCancelButton(None)
         progress.setModal(True)
         progress.show()
 
         while not thread_monitor.is_finished():
             self.app.processEvents()
-            time.sleep (0.1)
+            time.sleep(0.1)
 
         progress.hide()
 
@@ -246,13 +250,14 @@ class NewVmDlg (QDialog, Ui_NewVMDlg):
             self.trayIcon.showMessage(
                 "VM '{0}' has been created.".format(vmname), msecs=3000)
         else:
-            QMessageBox.warning (None, "Error creating AppVM!", "ERROR: {0}".format(thread_monitor.error_msg))
+            QMessageBox.warning(None, "Error creating AppVM!",
+                                "ERROR: {0}".format(thread_monitor.error_msg))
 
         self.done(0)
 
     @staticmethod
-    def do_create_vm(vmclass, vmname, label, template_vm, netvm,
-                     standalone, allow_networking, thread_monitor):
+    def do_create_vm(vmclass, vmname, label, template_vm, netvm, standalone,
+                     allow_networking, thread_monitor):
         vm = None
         qc = QubesVmCollection()
         qc.lock_db_for_writing()
@@ -286,5 +291,3 @@ class NewVmDlg (QDialog, Ui_NewVMDlg):
             qc.unlock_db()
 
         thread_monitor.set_finished()
-
-
