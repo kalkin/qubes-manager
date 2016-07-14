@@ -16,7 +16,8 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+# USA.
 #
 #
 
@@ -38,7 +39,6 @@ from pyinotify import WatchManager, ThreadedNotifier, EventsCodes, \
 from qubes.qubes import QubesVmCollection
 from qubes.qubes import QubesException
 from qubes.qubes import system_path
-from qubes.qubes import QubesDaemonPidfile
 from qubes.qubes import QubesHost
 from qubesmanager.about import AboutDialog
 import table_widgets
@@ -240,11 +240,13 @@ class VmRowInTable(object):
 
 
 vm_shutdown_timeout = 20000  # in msec
-vm_restart_check_timeout= 1000 # in msec
+vm_restart_check_timeout = 1000  # in msec
 
 
 class VmShutdownMonitor(QObject):
-    def __init__(self, vm, shutdown_time=vm_shutdown_timeout, check_time=vm_restart_check_timeout, and_restart=False, caller=None):
+    def __init__(self, vm, shutdown_time=vm_shutdown_timeout,
+                 check_time=vm_restart_check_timeout, and_restart=False,
+                 caller=None):
         QObject.__init__(self)
         self.vm = vm
         self.shutdown_time = shutdown_time
@@ -503,9 +505,8 @@ class VmManagerWindow(Ui_VmManagerWindow, QMainWindow):
             "view/show_inactive_vms", defaultValue=False).toBool()
         self.show_internal_vms = self.manager_settings.value(
             "view/show_internal_vms", defaultValue=False).toBool()
-        self.sort_by_column = str(
-            self.manager_settings.value("view/sort_column",
-                                        defaultValue=self.sort_by_column).toString())
+        self.sort_by_column = str(self.manager_settings.value(
+            "view/sort_column", defaultValue=self.sort_by_column).toString())
         self.sort_order = Qt.SortOrder(
             self.manager_settings.value("view/sort_order",
                                         defaultValue=self.sort_order).toInt()[
@@ -729,7 +730,7 @@ class VmManagerWindow(Ui_VmManagerWindow, QMainWindow):
                         self.clear_error(vm.qid)
                     elif prev_running and not vm.last_running:
                         # FIXME: remove when recAllowed state will be preserved
-                        if self.vm_rec.has_key(vm.name):
+                        if vm.name in self.vm_rec:
                             self.vm_rec.pop(vm.name)
                         self.running_vms_count -= 1
                         some_vms_have_changed_power_state = True
@@ -1151,8 +1152,7 @@ class VmManagerWindow(Ui_VmManagerWindow, QMainWindow):
                                     "ERROR: {0}".format(ex))
             return
 
-
-	self.start_vm(vm)
+        self.start_vm(vm)
 
     def start_vm(self, vm):
         assert not vm.is_running()
@@ -1203,7 +1203,6 @@ class VmManagerWindow(Ui_VmManagerWindow, QMainWindow):
                 "You need to install 'qubes-windows-tools' "
                 "package to use this option")
             return
-
 
         thread_monitor = ThreadMonitor()
         thread = threading.Thread(target=self.do_start_vm_tools_install,
@@ -1449,7 +1448,6 @@ class VmManagerWindow(Ui_VmManagerWindow, QMainWindow):
             return
         thread_monitor.set_finished()
 
-
     @pyqtSlot(name='on_action_run_command_in_vm_triggered')
     def action_run_command_in_vm_triggered(self):
         vm = self.get_selected_vm()
@@ -1470,9 +1468,10 @@ class VmManagerWindow(Ui_VmManagerWindow, QMainWindow):
             time.sleep(0.2)
 
         if not thread_monitor.success:
-            QMessageBox.warning(None, "Error while running command",
-                                "Exception while running command:<br>{0}".format(
-                                    thread_monitor.error_msg))
+            QMessageBox.warning(
+                None, "Error while running command",
+                "Exception while running command:<br>{0}".format(
+                    thread_monitor.error_msg))
 
     @staticmethod
     def do_run_command_in_vm(vm, command_to_run, thread_monitor):
